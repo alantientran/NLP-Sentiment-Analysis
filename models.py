@@ -6,6 +6,7 @@ from collections import Counter
 import numpy as np
 from nltk.corpus import stopwords
 import math
+import random
 
 class FeatureExtractor(object):
     def get_indexer(self):
@@ -108,7 +109,7 @@ class PerceptronClassifier(SentimentClassifier):
     def predict(self, sentence: List[str]) -> int:
         feature_vector = self.feat_extractor.extract_features(sentence)
         score = sum(self.weights[feature] * count for feature, count in feature_vector.items())
-        return 1 if score >= 0 else 0
+        return 1 if np.sign(score) >= 0 else 0
 
 
 class LogisticRegressionClassifier(SentimentClassifier):
@@ -127,13 +128,16 @@ class LogisticRegressionClassifier(SentimentClassifier):
 def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureExtractor) -> PerceptronClassifier:
     perceptron = PerceptronClassifier(feat_extractor)
 
+    random.seed(32)
+
     for _ in range(11):  # Number of epochs
+        random.shuffle(train_exs)
         for example in train_exs:
             # Extract features and get the current score (weighted sum)
             feature_vector = feat_extractor.extract_features(example.words, add_to_indexer=True)
             score = sum(perceptron.weights[feature] * count for feature, count in feature_vector.items())
             
-            # Make a prediction
+            # # Make a prediction
             prediction = 1 if score >= 0 else 0
             
             # Update weights if prediction is wrong

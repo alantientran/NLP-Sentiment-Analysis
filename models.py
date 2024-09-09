@@ -121,8 +121,17 @@ class LogisticRegressionClassifier(SentimentClassifier):
     def predict(self, sentence: List[str]) -> int:
         feature_vector = self.feat_extractor.extract_features(sentence)
         score = sum(self.weights[feature] * count for feature, count in feature_vector.items())
+        # Double check this
         probability = 1 / (1 + math.exp(-score))
         return 1 if probability >= 0.5 else 0
+    
+    def update_weights(self, feature_vector, label: int):
+        learning_rate = 0.1
+        score = sum(self.weights[feature] * count for feature, count in feature_vector.items())
+        probability = 1 / (1 + math.exp(-score))
+        error = label - probability
+        for feature, count in feature_vector.items():
+            self.weights[feature] +=  learning_rate * error * count
 
 
 def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureExtractor) -> PerceptronClassifier:
@@ -152,13 +161,13 @@ def train_logistic_regression(train_exs: List[SentimentExample], feat_extractor:
     logistic_regression = LogisticRegressionClassifier(feat_extractor)
     weights = logistic_regression.weights
 
-    for _ in range(10):  # Number of epochs
+    random.seed(21)
+
+    for _ in range(11):  # Number of epochs
+        random.shuffle(train_exs)
         for example in train_exs:
-            feature_vector = feat_extractor.extract_features(example.words)
-            score = sum(weights[feature] * count for feature, count in feature_vector.items())
-            probability = 1 / (1 + math.exp(-score))
-            for feature, count in feature_vector.items():
-                weights[feature] += (example.label - probability) * count
+            feature_vector = feat_extractor.extract_features(example.words, add_to_indexer=True) 
+            logistic_regression.update_weights(feature_vector, example.label)
     return logistic_regression
 
 

@@ -139,6 +139,13 @@ class LogisticRegressionClassifier(SentimentClassifier):
         for feature, count in feature_vector.items():
             self.weights[feature] +=  learning_rate * error * count
 
+    def update_plot_weights(self, feature_vector, label: int, learning_rate: float):
+        score = sum(self.weights[feature] * count for feature, count in feature_vector.items())
+        probability = 1 / (1 + math.exp(-score))
+        error = label - probability
+        for feature, count in feature_vector.items():
+            self.weights[feature] +=  learning_rate * error * count
+
 
 def train_perceptron(train_exs: List[SentimentExample], feat_extractor: FeatureExtractor) -> PerceptronClassifier:
     perceptron = PerceptronClassifier(feat_extractor)
@@ -193,6 +200,38 @@ def train_logistic_regression(train_exs: List[SentimentExample], feat_extractor:
     return logistic_regression
 
 
+def compute_log_likelihood(logistic_regression, examples):
+    log_likelihood = 0
+    for example in examples:
+        feature_vector = logistic_regression.feat_extractor.extract_features(example.words, add_to_indexer=False)
+        score = sum(logistic_regression.weights[feature] * count for feature, count in feature_vector.items())
+        probability = 1 / (1 + math.exp(-score))
+        label = example.label
+        # Avoid log(0) by adding a small epsilon value
+        epsilon = 1e-10
+        log_likelihood += label * math.log(probability + epsilon) + (1 - label) * math.log(1 - probability + epsilon)
+    return log_likelihood
+
+def train_logistic_regression_log_likelihood(train_exs: List[SentimentExample], feat_extractor: FeatureExtractor, learning_rate: float) -> List[float]:
+    logistic_regression = LogisticRegressionClassifier(feat_extractor)
+    log_likelihoods = []
+
+    num_epochs = 15
+
+    for epoch in range(num_epochs):  # Number of epochs
+        random.shuffle(train_exs)
+        for example in train_exs:
+            feature_vector = feat_extractor.extract_features(example.words, add_to_indexer=True)
+            logistic_regression.update_plot_weights(feature_vector, example.label, learning_rate)
+        
+        # Compute log likelihood after each epoch
+        log_likelihood = compute_log_likelihood(logistic_regression, train_exs)
+        log_likelihoods.append(log_likelihood)
+
+    return log_likelihoods
+
+    
+
 def train_model(args, train_exs: List[SentimentExample], dev_exs: List[SentimentExample]) -> SentimentClassifier:
     if args.model == "TRIVIAL":
         feat_extractor = None
@@ -211,9 +250,56 @@ def train_model(args, train_exs: List[SentimentExample], dev_exs: List[Sentiment
         model = train_perceptron(train_exs, feat_extractor)
     elif args.model == "LR":
         model = train_logistic_regression(train_exs, feat_extractor)
-    # elif args.model == "LR_STEPSIZES":
-    #     plot_lr_different_learning_rates(train_exs, dev_exs)
+    elif args.model == "LR_STEPSIZES":
+        plot_lr_different_learning_rates(train_exs, dev_exs)
+    elif args.model == "LR_LL":
+        plot_log_likelihood_vs_iterations(train_exs)
     else:
         raise Exception("Pass in TRIVIAL, PERCEPTRON, or LR to run the appropriate system")
 
     return model
+
+
+def plot_lr_different_learning_rates(train_exs: List[SentimentExample], dev_exs: List[SentimentExample]):
+    learning_rates = [1, 0.5, 0.1, 0.01]
+    num_epochs = 15
+
+    # Dictionary to store accuracies for each learning rate
+    all_accuracies = {lr: [] for lr in learning_rates}
+
+    for lr in learning_rates:
+        accuracies = train_logistic_regression_plot(train_exs, dev_exs, UnigramFeatureExtractor(Indexer()), lr)
+        all_accuracies[lr] = accuracies
+
+    # Plot accuracy vs. number of epochs for each learning rate
+    plt.figure(figsize=(12, 6))
+    for lr, accuracies in all_accuracies.items():
+        plt.plot(range(num_epochs), accuracies, label=f'LR = {lr}')
+    
+    plt.xlabel('Epoch')
+    plt.ylabel('Development Accuracy')
+    plt.title('Accuracy vs. Epoch for Different Learning Rates')
+    plt.legend()
+    plt.show()
+
+def plot_log_likelihood_vs_iterations(train_exs: List[SentimentExample]):
+    learning_rates = [1, 0.5, 0.1, 0.01]
+    num_epochs = 15
+
+    # Dictionary to store log likelihoods for each learning rate
+    all_log_likelihoods = {lr: [] for lr in learning_rates}
+
+    for lr in learning_rates:
+        log_likelihoods = train_logistic_regression_log_likelihood(train_exs, UnigramFeatureExtractor(Indexer()), lr)
+        all_log_likelihoods[lr] = log_likelihoods
+
+    # Plot log likelihood vs. number of epochs for each learning rate
+    plt.figure(figsize=(12, 6))
+    for lr, log_likelihoods in all_log_likelihoods.items():
+        plt.plot(range(num_epochs), log_likelihoods, label=f'LR = {lr}')
+    
+    plt.xlabel('Epoch')
+    plt.ylabel('Log Likelihood')
+    plt.title('Log Likelihood vs. Epoch for Different Learning Rates')
+    plt.legend()
+    plt.show()
